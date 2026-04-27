@@ -1,0 +1,45 @@
+# Buildkite pipeline configuration for TPU hardware tests
+# Runs vLLM tests on Google Cloud TPU instances
+
+steps:
+  - label: ":tpu: TPU Tests - v4-8"
+    key: tpu-v4-8-tests
+    agents:
+      queue: tpu-v4-8
+    env:
+      VLLM_TARGET_DEVICE: tpu
+      HF_HOME: /root/.cache/huggingface
+    commands:
+      - echo "--- Setting up TPU environment"
+      - pip install -e ".[tpu]" --extra-index-url https://storage.googleapis.com/jax-releases/libtpu_releases.html
+      - echo "--- Running TPU unit tests"
+      - pytest tests/tpu/ -v --timeout=300 -x
+      - echo "--- Running TPU model tests"
+      - pytest tests/models/ -v --timeout=600 -x -k "tpu"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 1
+          limit: 1
+
+  - label: ":tpu: TPU Tests - v5e-8"
+    key: tpu-v5e-8-tests
+    agents:
+      queue: tpu-v5e-8
+    env:
+      VLLM_TARGET_DEVICE: tpu
+      HF_HOME: /root/.cache/huggingface
+    commands:
+      - echo "--- Setting up TPU v5e environment"
+      - pip install -e ".[tpu]" --extra-index-url https://storage.googleapis.com/jax-releases/libtpu_releases.html
+      - echo "--- Running TPU v5e inference tests"
+      - pytest tests/tpu/ -v --timeout=300 -x
+      - echo "--- Running throughput benchmarks"
+      - python benchmarks/benchmark_throughput.py --model facebook/opt-125m --backend vllm --device tpu
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
