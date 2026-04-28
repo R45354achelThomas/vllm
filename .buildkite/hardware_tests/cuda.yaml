@@ -1,0 +1,70 @@
+# CUDA hardware test configuration for vllm CI pipeline
+# Runs GPU-specific tests on NVIDIA CUDA-enabled machines
+
+agents:
+  queue: cuda
+
+steps:
+  - label: ":nvidia: CUDA Unit Tests"
+    key: cuda-unit-tests
+    agents:
+      gpu: nvidia
+      cuda: "12.1"
+    commands:
+      - echo "--- Installing dependencies"
+      - pip install -e ".[dev]"
+      - echo "--- Running CUDA unit tests"
+      - pytest tests/test_cuda_utils.py -v --timeout=300
+      - pytest tests/kernels/ -v --timeout=600
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+    timeout_in_minutes: 60
+
+  - label: ":nvidia: CUDA Integration Tests"
+    key: cuda-integration-tests
+    depends_on: cuda-unit-tests
+    agents:
+      gpu: nvidia
+      cuda: "12.1"
+    commands:
+      - echo "--- Installing dependencies"
+      - pip install -e ".[dev]"
+      - echo "--- Running CUDA integration tests"
+      - pytest tests/test_llm_engine.py -v --timeout=600
+      - pytest tests/test_sampling.py -v --timeout=600
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+    timeout_in_minutes: 90
+
+  - label: ":nvidia: Multi-GPU Tests"
+    key: cuda-multi-gpu-tests
+    depends_on: cuda-integration-tests
+    agents:
+      gpu: nvidia-multi
+      cuda: "12.1"
+      gpu_count: "2"
+    commands:
+      - echo "--- Installing dependencies"
+      - pip install -e ".[dev]"
+      - echo "--- Running multi-GPU tests"
+      - pytest tests/test_tensor_parallel.py -v --timeout=900
+    env:
+      CUDA_VISIBLE_DEVICES: "0,1"
+      VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+    timeout_in_minutes: 120
+
+  - label: ":nvidia: CUDA Memory Tests"
+    key: cuda-memory-tests
+    agents:
+      gpu: nvidia
+      cuda: "12.1"
+    commands:
+      - echo "--- Installing dependencies"
+      - pip install -e ".[dev]"
+      - echo "--- Running memory management tests"
+      - pytest tests/test_block_manager.py -v --timeout=300
+      - pytest tests/test_cache_engine.py -v --timeout=300
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+    timeout_in_minutes: 60
