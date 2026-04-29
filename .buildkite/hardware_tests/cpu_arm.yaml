@@ -1,0 +1,103 @@
+# CI configuration for CPU ARM hardware tests
+# Covers ARM-based CPU inference tests (e.g., Graviton, Apple Silicon)
+
+steps:
+  - label: ":cpu: ARM CPU - Basic Inference Tests"
+    agents:
+      queue: cpu-arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+      VLLM_CPU_OMP_THREADS_BIND: auto
+    commands:
+      - echo "--- Installing dependencies"
+      - pip install -e ".[cpu]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- Running basic CPU ARM inference tests"
+      - pytest tests/basic_correctness/ -v --timeout=300
+        -k "not cuda and not gpu"
+        --ignore=tests/basic_correctness/test_cuda_graph.py
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":cpu: ARM CPU - Quantization Tests"
+    agents:
+      queue: cpu-arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running quantization tests on ARM CPU"
+      - pytest tests/quantization/ -v --timeout=300
+        -k "int8 or q4_0 or gguf"
+        --ignore=tests/quantization/test_cuda_graph.py
+    timeout_in_minutes: 45
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":cpu: ARM CPU - Sampling and Logprobs Tests"
+    agents:
+      queue: cpu-arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running sampling tests on ARM CPU"
+      - pytest tests/samplers/ -v --timeout=300
+        -k "not cuda and not gpu"
+    timeout_in_minutes: 45
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":cpu: ARM CPU - Engine Core Tests"
+    agents:
+      queue: cpu-arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running engine core tests on ARM CPU"
+      - pytest tests/engine/ -v --timeout=300
+        -k "not cuda and not gpu"
+    timeout_in_minutes: 45
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":cpu: ARM CPU - Entrypoints Tests"
+    agents:
+      queue: cpu-arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running entrypoints tests on ARM CPU"
+      - pytest tests/entrypoints/ -v --timeout=300
+        -k "not cuda and not gpu"
+        --ignore=tests/entrypoints/llm/test_guided_generate.py
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":cpu: ARM CPU - Tokenization Tests"
+    agents:
+      queue: cpu-arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+    commands:
+      - echo "--- Running tokenization tests on ARM CPU"
+      - pytest tests/tokenization/ -v --timeout=120
+    timeout_in_minutes: 20
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
