@@ -1,0 +1,62 @@
+# BuildKite CI configuration for Intel XPU (GPU) hardware tests
+# Runs vllm tests on Intel discrete GPU hardware (e.g., Intel Arc, Ponte Vecchio)
+
+steps:
+  - label: ":intel: XPU - Build & Basic Tests"
+    key: xpu-build
+    agents:
+      hardware: xpu
+    env:
+      VLLM_TARGET_DEVICE: xpu
+      SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS: "1"
+    commands:
+      - echo "--- Building vllm for Intel XPU"
+      - pip install -e . --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
+      - echo "--- Running basic import tests"
+      - python -c "import vllm; print('vllm imported successfully')"
+      - echo "--- Running XPU device detection"
+      - python -c "import torch; print('XPU available:', torch.xpu.is_available()); print('XPU device count:', torch.xpu.device_count())"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":intel: XPU - Inference Tests"
+    key: xpu-inference
+    depends_on: xpu-build
+    agents:
+      hardware: xpu
+    env:
+      VLLM_TARGET_DEVICE: xpu
+      SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS: "1"
+    commands:
+      - echo "--- Running XPU inference tests"
+      - pytest tests/xpu/ -v --timeout=300 -x
+      - echo "--- Running basic LLM inference smoke test"
+      - python -c "
+          from vllm import LLM, SamplingParams
+          llm = LLM(model='facebook/opt-125m', device='xpu')
+          outputs = llm.generate(['Hello, my name is'], SamplingParams(max_tokens=20))
+          print(outputs[0].outputs[0].text)
+          print('XPU inference smoke test passed!')
+        "
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":intel: XPU - Worker & Engine Tests"
+    key: xpu-worker
+    depends_on: xpu-build
+    agents:
+      hardware: xpu
+    env:
+      VLLM_TARGET_DEVICE: xpu
+    commands:
+      - echo "--- Running worker tests"
+      - pytest tests/worker/ -v --timeout=300 -k "xpu or not cuda" -x
+      - echo "--- Running engine tests"
+      - pytest tests/engine/ -v --timeout=300 -k "xpu or not cuda" -x
+    timeout_in_minutes: 60
