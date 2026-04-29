@@ -1,0 +1,82 @@
+# Buildkite pipeline configuration for Intel Gaudi (HPU) hardware tests
+# Runs vLLM tests on Intel Gaudi accelerators
+
+steps:
+  - label: ":fire: Gaudi HPU - Basic Tests"
+    key: gaudi-basic
+    agents:
+      queue: gaudi
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_ENABLE_LAZY_COLLECTIVES: "true"
+    commands:
+      - echo "--- :python: Setting up environment"
+      - pip install -e ".[hpu]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- :test_tube: Running basic sanity tests"
+      - pytest tests/basic_correctness/test_basic_correctness.py -v --tb=short -x
+        -m "not multi_gpu"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":fire: Gaudi HPU - LLM Engine Tests"
+    key: gaudi-engine
+    depends_on: gaudi-basic
+    agents:
+      queue: gaudi
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_ENABLE_LAZY_COLLECTIVES: "true"
+    commands:
+      - echo "--- :python: Setting up environment"
+      - pip install -e ".[hpu]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- :test_tube: Running LLM engine tests"
+      - pytest tests/engine/ -v --tb=short -x -m "not multi_gpu"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":fire: Gaudi HPU - Sampling Tests"
+    key: gaudi-sampling
+    depends_on: gaudi-basic
+    agents:
+      queue: gaudi
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_ENABLE_LAZY_COLLECTIVES: "true"
+    commands:
+      - echo "--- :python: Setting up environment"
+      - pip install -e ".[hpu]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- :test_tube: Running sampling tests"
+      - pytest tests/samplers/ -v --tb=short -x -m "not multi_gpu"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":fire: Gaudi HPU - Benchmarks"
+    key: gaudi-benchmarks
+    depends_on:
+      - gaudi-engine
+      - gaudi-sampling
+    agents:
+      queue: gaudi
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_ENABLE_LAZY_COLLECTIVES: "true"
+    commands:
+      - echo "--- :python: Setting up environment"
+      - pip install -e ".[hpu]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- :chart_with_upwards_trend: Running throughput benchmark"
+      - python benchmarks/benchmark_throughput.py
+          --model facebook/opt-125m
+          --backend vllm
+          --num-prompts 200
+          --device hpu
+    timeout_in_minutes: 45
+    soft_fail: true
