@@ -1,0 +1,73 @@
+# BuildKite CI configuration for OpenVINO hardware tests
+# Runs vllm tests on Intel OpenVINO backend
+
+steps:
+  - label: ":intel: OpenVINO Backend Tests"
+    key: openvino-tests
+    tags:
+      - openvino
+    commands:
+      - "echo '--- Setting up OpenVINO environment'"
+      - "pip install openvino openvino-dev --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly"
+      - "pip install -e '.[openvino]' --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly"
+      - "echo '--- Running OpenVINO basic tests'"
+      - "pytest tests/openvino/ -v --timeout=300 -x"
+      - "echo '--- Running OpenVINO LLM engine tests'"
+      - "pytest tests/engine/ -v --timeout=300 -x -k 'openvino'"
+    env:
+      VLLM_OPENVINO_DEVICE: CPU
+      VLLM_OPENVINO_ENABLE_QUANTIZED_WEIGHTS: "0"
+    agents:
+      queue: openvino
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+    timeout_in_minutes: 60
+
+  - label: ":intel: OpenVINO INT8 Quantization Tests"
+    key: openvino-int8-tests
+    depends_on: openvino-tests
+    tags:
+      - openvino
+    commands:
+      - "echo '--- Setting up OpenVINO environment for INT8'"
+      - "pip install openvino openvino-dev nncf --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly"
+      - "pip install -e '.[openvino]' --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly"
+      - "echo '--- Running OpenVINO INT8 quantization tests'"
+      - "pytest tests/openvino/ -v --timeout=600 -x -k 'int8 or quantiz'"
+    env:
+      VLLM_OPENVINO_DEVICE: CPU
+      VLLM_OPENVINO_ENABLE_QUANTIZED_WEIGHTS: "1"
+      VLLM_OPENVINO_CPU_KV_CACHE_PRECISION: u8
+    agents:
+      queue: openvino
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+    timeout_in_minutes: 90
+
+  - label: ":intel: OpenVINO Throughput Benchmark"
+    key: openvino-benchmark
+    depends_on: openvino-int8-tests
+    tags:
+      - openvino
+      - benchmark
+    commands:
+      - "echo '--- Running OpenVINO throughput benchmark'"
+      - "pip install openvino openvino-dev --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly"
+      - "pip install -e '.[openvino]' --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly"
+      - "python benchmarks/benchmark_throughput.py --backend vllm --model facebook/opt-125m --device openvino --num-prompts 200"
+    env:
+      VLLM_OPENVINO_DEVICE: CPU
+      OMP_NUM_THREADS: "16"
+    agents:
+      queue: openvino
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+    timeout_in_minutes: 45
+    soft_fail:
+      - exit_status: 1
