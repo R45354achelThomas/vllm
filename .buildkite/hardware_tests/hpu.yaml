@@ -1,0 +1,83 @@
+# Hardware tests for Intel Gaudi (HPU) accelerators
+# Runs vllm test suite on Habana Processing Units
+
+steps:
+  - label: ":habana: HPU - Build and Basic Tests"
+    key: hpu-build
+    agents:
+      queue: hpu
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_LAZY_MODE: 1
+    commands:
+      - echo "--- Building vllm for HPU"
+      - pip install -e .[hpu] --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- Running basic import tests"
+      - python -c "import vllm; print('vllm import OK')"
+      - echo "--- Running HPU unit tests"
+      - pytest tests/test_config.py -v --timeout=120
+      - pytest tests/test_sampling_params.py -v --timeout=120
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":habana: HPU - Offline Inference"
+    key: hpu-offline-inference
+    depends_on: hpu-build
+    agents:
+      queue: hpu
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_LAZY_MODE: 1
+      HABANA_VISIBLE_DEVICES: all
+    commands:
+      - echo "--- Running offline inference tests on HPU"
+      - pytest tests/entrypoints/llm/test_generate.py -v --timeout=300 -k "not beam_search"
+      - pytest tests/entrypoints/llm/test_encode.py -v --timeout=300
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":habana: HPU - Model Tests"
+    key: hpu-model-tests
+    depends_on: hpu-build
+    agents:
+      queue: hpu
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_LAZY_MODE: 1
+      HABANA_VISIBLE_DEVICES: all
+    commands:
+      - echo "--- Running model executor tests on HPU"
+      - pytest tests/models/ -v --timeout=300
+        -k "not (cuda or gpu_count_2)"
+        --ignore=tests/models/decoder_only/audio_language
+        --ignore=tests/models/decoder_only/vision_language
+    timeout_in_minutes: 120
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":habana: HPU - Server Tests"
+    key: hpu-server-tests
+    depends_on: hpu-build
+    agents:
+      queue: hpu
+    env:
+      VLLM_TARGET_DEVICE: hpu
+      PT_HPU_LAZY_MODE: 1
+      HABANA_VISIBLE_DEVICES: all
+    commands:
+      - echo "--- Running OpenAI-compatible server tests on HPU"
+      - pytest tests/entrypoints/openai/test_completion.py -v --timeout=300
+      - pytest tests/entrypoints/openai/test_chat_template.py -v --timeout=180
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
