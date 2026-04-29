@@ -1,0 +1,72 @@
+# Buildkite pipeline configuration for AWS Neuron (Inferentia/Trainium) hardware tests
+# This pipeline runs vllm tests on AWS Neuron devices
+
+steps:
+  - label: ":aws: Neuron - Build and Test"
+    key: neuron-build-test
+    agents:
+      queue: neuron
+    env:
+      VLLM_TARGET_DEVICE: neuron
+      HF_HOME: /data/huggingface
+    commands:
+      - echo "--- Setting up Neuron environment"
+      - source /opt/aws_neuronx_venv/bin/activate
+      - neuron-ls
+      - echo "--- Installing vllm"
+      - pip install -e . --extra-index-url https://pip.repos.neuron.amazonaws.com
+      - echo "--- Running Neuron basic tests"
+      - pytest tests/neuron/ -v --timeout=300 -x
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 1
+          limit: 1
+
+  - label: ":aws: Neuron - LLM Inference Tests"
+    key: neuron-inference
+    depends_on: neuron-build-test
+    agents:
+      queue: neuron
+    env:
+      VLLM_TARGET_DEVICE: neuron
+      HF_HOME: /data/huggingface
+      NEURON_RT_NUM_CORES: "2"
+    commands:
+      - echo "--- Setting up Neuron environment"
+      - source /opt/aws_neuronx_venv/bin/activate
+      - echo "--- Running LLM inference tests"
+      - pytest tests/entrypoints/llm/test_llm_generate.py -v --timeout=600
+        -k "not cuda and not gpu"
+      - echo "--- Running model tests"
+      - pytest tests/models/ -v --timeout=600
+        -k "neuron or not cuda"
+        --ignore=tests/models/test_embedding.py
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":aws: Neuron - OpenAI API Server Tests"
+    key: neuron-api-server
+    depends_on: neuron-build-test
+    agents:
+      queue: neuron
+    env:
+      VLLM_TARGET_DEVICE: neuron
+      HF_HOME: /data/huggingface
+    commands:
+      - echo "--- Setting up Neuron environment"
+      - source /opt/aws_neuronx_venv/bin/activate
+      - echo "--- Running OpenAI API server tests"
+      - pytest tests/entrypoints/openai/ -v --timeout=300
+        -k "not cuda"
+        --ignore=tests/entrypoints/openai/test_vision.py
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
