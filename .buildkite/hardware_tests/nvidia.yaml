@@ -1,0 +1,103 @@
+# Buildkite pipeline configuration for NVIDIA GPU hardware tests
+# This file defines the test steps for NVIDIA CUDA-based GPU testing
+
+steps:
+  - label: ":nvidia: NVIDIA GPU - Unit Tests"
+    agents:
+      queue: nvidia-gpu
+    plugins:
+      - docker#v5.11.0:
+          image: "vllm/vllm-ci:latest"
+          gpus: all
+          environment:
+            - CUDA_VISIBLE_DEVICES=0,1
+            - VLLM_TEST_TIMEOUT_MINUTES=30
+    commands:
+      - echo "--- Running unit tests on NVIDIA GPU"
+      - pip install -e ".[test]"
+      - pytest tests/unit/ -v --timeout=300 -x
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":nvidia: NVIDIA GPU - Model Tests (FP16)"
+    agents:
+      queue: nvidia-gpu
+    plugins:
+      - docker#v5.11.0:
+          image: "vllm/vllm-ci:latest"
+          gpus: all
+          environment:
+            - CUDA_VISIBLE_DEVICES=0
+            - VLLM_DTYPE=float16
+    commands:
+      - echo "--- Running model tests with FP16 precision"
+      - pip install -e ".[test]"
+      - pytest tests/models/ -v --timeout=600 -k "not slow"
+    timeout_in_minutes: 90
+
+  - label: ":nvidia: NVIDIA GPU - Model Tests (BF16)"
+    agents:
+      queue: nvidia-gpu-ampere
+    plugins:
+      - docker#v5.11.0:
+          image: "vllm/vllm-ci:latest"
+          gpus: all
+          environment:
+            - CUDA_VISIBLE_DEVICES=0
+            - VLLM_DTYPE=bfloat16
+    commands:
+      - echo "--- Running model tests with BF16 precision"
+      - pip install -e ".[test]"
+      - pytest tests/models/ -v --timeout=600 -k "not slow"
+    timeout_in_minutes: 90
+
+  - label: ":nvidia: NVIDIA GPU - Tensor Parallelism Tests"
+    agents:
+      queue: nvidia-multi-gpu
+    plugins:
+      - docker#v5.11.0:
+          image: "vllm/vllm-ci:latest"
+          gpus: all
+          environment:
+            - CUDA_VISIBLE_DEVICES=0,1,2,3
+            - VLLM_TENSOR_PARALLEL_SIZE=4
+    commands:
+      - echo "--- Running tensor parallelism tests"
+      - pip install -e ".[test]"
+      - pytest tests/distributed/ -v --timeout=900 -k "tensor_parallel"
+    timeout_in_minutes: 120
+
+  - label: ":nvidia: NVIDIA GPU - Quantization Tests"
+    agents:
+      queue: nvidia-gpu
+    plugins:
+      - docker#v5.11.0:
+          image: "vllm/vllm-ci:latest"
+          gpus: all
+          environment:
+            - CUDA_VISIBLE_DEVICES=0
+    commands:
+      - echo "--- Running quantization tests (AWQ, GPTQ, SqueezeLLM)"
+      - pip install -e ".[test]"
+      - pytest tests/quantization/ -v --timeout=600
+    timeout_in_minutes: 90
+
+  - label: ":nvidia: NVIDIA GPU - Benchmarks"
+    agents:
+      queue: nvidia-gpu
+    plugins:
+      - docker#v5.11.0:
+          image: "vllm/vllm-ci:latest"
+          gpus: all
+          environment:
+            - CUDA_VISIBLE_DEVICES=0
+            - BENCHMARK_RESULTS_DIR=/tmp/benchmark_results
+    commands:
+      - echo "--- Running throughput benchmarks"
+      - pip install -e ".[test]"
+      - python benchmarks/benchmark_throughput.py --model facebook/opt-125m --backend vllm --num-prompts 200
+    timeout_in_minutes: 60
+    soft_fail: true
