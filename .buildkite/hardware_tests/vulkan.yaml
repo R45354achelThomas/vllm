@@ -1,0 +1,50 @@
+# Buildkite pipeline configuration for Vulkan hardware tests
+# Tests vllm on Vulkan-capable GPU hardware
+
+steps:
+  - label: ":vulkan: Vulkan Backend Tests"
+    agents:
+      queue: vulkan
+    plugins:
+      - docker#v5.3.0:
+          image: vllm/vllm-vulkan:latest
+          gpus: all
+          environment:
+            - VLLM_WORKER_MULTIPROC_METHOD=spawn
+            - VLLM_TARGET_DEVICE=vulkan
+          volumes:
+            - /dev/dri:/dev/dri
+          privileged: true
+    commands:
+      - echo "--- Installing dependencies"
+      - pip install -e ".[vulkan]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- Running Vulkan backend smoke tests"
+      - pytest tests/backends/test_vulkan.py -v --timeout=300
+      - echo "--- Running basic inference tests"
+      - pytest tests/test_basic_correctness.py -v -k "vulkan" --timeout=600
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":vulkan: Vulkan Model Loading Tests"
+    agents:
+      queue: vulkan
+    plugins:
+      - docker#v5.3.0:
+          image: vllm/vllm-vulkan:latest
+          gpus: all
+          environment:
+            - VLLM_TARGET_DEVICE=vulkan
+          volumes:
+            - /dev/dri:/dev/dri
+          privileged: true
+    commands:
+      - echo "--- Running model loading tests"
+      - pytest tests/test_models.py -v -k "vulkan" --timeout=900
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
