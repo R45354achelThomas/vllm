@@ -1,0 +1,93 @@
+# ROCm (AMD GPU) hardware test configuration for vllm
+# Runs tests on AMD GPUs using ROCm backend
+
+agents:
+  queue: amd-gpu
+
+steps:
+  - label: ":amd: ROCm - Basic Inference Tests"
+    key: rocm-basic-inference
+    agents:
+      queue: amd-gpu
+    commands:
+      - echo "--- Setting up ROCm environment"
+      - rocm-smi
+      - python -c "import torch; print('PyTorch version:', torch.__version__); print('ROCm available:', torch.cuda.is_available())"
+      - echo "--- Running basic inference tests"
+      - pytest tests/basic_correctness/ -v --timeout=300 -x
+    env:
+      HIP_VISIBLE_DEVICES: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":amd: ROCm - Model Tests"
+    key: rocm-model-tests
+    depends_on: rocm-basic-inference
+    agents:
+      queue: amd-gpu
+    commands:
+      - echo "--- Running model correctness tests"
+      - pytest tests/models/ -v --timeout=600 -x -k "not gptq"
+    env:
+      HIP_VISIBLE_DEVICES: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 120
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":amd: ROCm - Tensor Parallel Tests"
+    key: rocm-tp-tests
+    depends_on: rocm-basic-inference
+    agents:
+      queue: amd-gpu-multi
+    commands:
+      - echo "--- Running tensor parallel tests"
+      - pytest tests/distributed/ -v --timeout=600 -x -k "tensor_parallel"
+    env:
+      HIP_VISIBLE_DEVICES: "0,1"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":amd: ROCm - Sampling and Logprobs Tests"
+    key: rocm-sampling-tests
+    depends_on: rocm-basic-inference
+    agents:
+      queue: amd-gpu
+    commands:
+      - echo "--- Running sampling tests"
+      - pytest tests/samplers/ -v --timeout=300 -x
+    env:
+      HIP_VISIBLE_DEVICES: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":amd: ROCm - Engine Core Tests"
+    key: rocm-engine-tests
+    depends_on: rocm-basic-inference
+    agents:
+      queue: amd-gpu
+    commands:
+      - echo "--- Running engine core tests"
+      - pytest tests/engine/ -v --timeout=300 -x
+    env:
+      HIP_VISIBLE_DEVICES: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
