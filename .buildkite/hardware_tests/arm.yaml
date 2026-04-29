@@ -1,0 +1,85 @@
+# Buildkite pipeline configuration for ARM hardware tests
+# Runs vllm tests on ARM-based hardware (e.g., AWS Graviton, Apple Silicon)
+
+steps:
+  - label: ":arm: ARM - Build & Basic Tests"
+    key: arm-build
+    agents:
+      queue: arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Building vllm on ARM"
+      - pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- Running basic import tests"
+      - python -c "import vllm; print('vllm imported successfully')"
+      - echo "--- Running CPU backend tests"
+      - pytest tests/test_config.py -v --timeout=300
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":arm: ARM - Engine Core Tests"
+    key: arm-engine
+    depends_on: arm-build
+    agents:
+      queue: arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running engine core tests on ARM"
+      - pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+      - pytest tests/engine/ -v --timeout=600 -x
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":arm: ARM - Entrypoints Tests"
+    key: arm-entrypoints
+    depends_on: arm-build
+    agents:
+      queue: arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running entrypoints tests on ARM"
+      - pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+      - pytest tests/entrypoints/ -v --timeout=600 -x
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":arm: ARM - Tokenization Tests"
+    key: arm-tokenization
+    depends_on: arm-build
+    agents:
+      queue: arm
+    env:
+      VLLM_TARGET_DEVICE: cpu
+    commands:
+      - echo "--- Running tokenization tests on ARM"
+      - pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+      - pytest tests/tokenization/ -v --timeout=300
+    timeout_in_minutes: 45
+
+  - wait: ~
+    continue_on_failure: true
+
+  - label: ":arm: ARM - Test Results"
+    agents:
+      queue: arm
+    commands:
+      - echo "ARM hardware test suite completed"
+    depends_on:
+      - arm-engine
+      - arm-entrypoints
+      - arm-tokenization
