@@ -1,0 +1,96 @@
+# Hardware tests for x86 CPUs with AVX-512 support
+# These tests validate vllm functionality on x86 platforms with AVX-512 instructions
+
+agents:
+  queue: cpu-x86-avx512
+
+steps:
+  - label: ":computer: CPU x86 AVX-512 - Basic Inference"
+    commands:
+      - "echo '--- Environment Info'"
+      - "python -c \"import platform; print(platform.processor())\""
+      - "python -c \"from cpuinfo import get_cpu_info; info = get_cpu_info(); print('AVX-512 support:', 'avx512f' in info.get('flags', []))\""
+      - "echo '--- Running basic inference tests'"
+      - "pytest tests/basic_correctness/ -v --timeout=300 -x"
+        "-k 'not cuda and not gpu'"
+        "--tb=short"
+    env:
+      VLLM_TARGET_DEVICE: "cpu"
+      OMP_NUM_THREADS: "8"
+      VLLM_CPU_KVCACHE_SPACE: "4"
+      VLLM_CPU_AVX512: "1"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":computer: CPU x86 AVX-512 - LLM Engine Tests"
+    commands:
+      - "echo '--- Running LLM engine tests with AVX-512'"
+      - "pytest tests/engine/ -v --timeout=300 -x"
+        "-k 'not cuda and not gpu'"
+        "--tb=short"
+    env:
+      VLLM_TARGET_DEVICE: "cpu"
+      OMP_NUM_THREADS: "16"
+      VLLM_CPU_KVCACHE_SPACE: "8"
+      VLLM_CPU_AVX512: "1"
+      VLLM_CPU_AVX512BF16: "1"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":computer: CPU x86 AVX-512 - Quantization Tests"
+    commands:
+      - "echo '--- Running quantization tests with AVX-512 VNNI'"
+      - "pytest tests/quantization/ -v --timeout=300 -x"
+        "-k 'not cuda and not gpu and (int8 or int4)'"
+        "--tb=short"
+    env:
+      VLLM_TARGET_DEVICE: "cpu"
+      OMP_NUM_THREADS: "16"
+      VLLM_CPU_KVCACHE_SPACE: "8"
+      VLLM_CPU_AVX512: "1"
+      VLLM_CPU_AVX512VNNI: "1"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":computer: CPU x86 AVX-512 - Sampling Tests"
+    commands:
+      - "echo '--- Running sampling tests'"
+      - "pytest tests/samplers/ -v --timeout=300"
+        "-k 'not cuda and not gpu'"
+        "--tb=short"
+    env:
+      VLLM_TARGET_DEVICE: "cpu"
+      OMP_NUM_THREADS: "8"
+      VLLM_CPU_KVCACHE_SPACE: "4"
+      VLLM_CPU_AVX512: "1"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":computer: CPU x86 AVX-512 - OpenAI API Server Tests"
+    commands:
+      - "echo '--- Running OpenAI-compatible API server tests'"
+      - "pytest tests/entrypoints/openai/ -v --timeout=300 -x"
+        "-k 'not cuda and not gpu'"
+        "--tb=short"
+    env:
+      VLLM_TARGET_DEVICE: "cpu"
+      OMP_NUM_THREADS: "8"
+      VLLM_CPU_KVCACHE_SPACE: "4"
+      VLLM_CPU_AVX512: "1"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
