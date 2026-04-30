@@ -1,0 +1,104 @@
+# Hardware tests for HIP (Heterogeneous-compute Interface for Portability)
+# This covers AMD GPU testing via the HIP runtime
+
+steps:
+  - label: ":amd: HIP - Basic Model Loading"
+    agents:
+      queue: amd-gpu
+    plugins:
+      - docker#v5.8.0:
+          image: "vllm/vllm-hip:latest"
+          runtime: "nvidia"  # HIP can run on NVIDIA via hipify
+          gpus: all
+          environment:
+            - HIP_VISIBLE_DEVICES=0
+            - VLLM_TARGET_DEVICE=hip
+    commands:
+      - pip install -e .[hip] --extra-index-url https://download.pytorch.org/whl/rocm5.7
+      - python -c "import vllm; print('vllm imported successfully')"
+      - python -m pytest tests/basic_correctness/test_basic_correctness.py -v --timeout=300
+    timeout_in_minutes: 30
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":amd: HIP - Attention Kernels"
+    agents:
+      queue: amd-gpu
+    plugins:
+      - docker#v5.8.0:
+          image: "vllm/vllm-hip:latest"
+          gpus: all
+          environment:
+            - HIP_VISIBLE_DEVICES=0
+            - VLLM_TARGET_DEVICE=hip
+            - PYTORCH_ROCM_ARCH=gfx90a
+    commands:
+      - pip install -e .[hip]
+      - python -m pytest tests/kernels/test_attention.py -v --timeout=600 -k "not flash_attn"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":amd: HIP - LLM Engine Tests"
+    agents:
+      queue: amd-gpu
+    plugins:
+      - docker#v5.8.0:
+          image: "vllm/vllm-hip:latest"
+          gpus: all
+          environment:
+            - HIP_VISIBLE_DEVICES=0,1
+            - VLLM_TARGET_DEVICE=hip
+    commands:
+      - pip install -e .[hip]
+      - python -m pytest tests/engine/ -v --timeout=600
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":amd: HIP - Tensor Parallelism"
+    agents:
+      queue: amd-gpu
+    plugins:
+      - docker#v5.8.0:
+          image: "vllm/vllm-hip:latest"
+          gpus: all
+          environment:
+            - HIP_VISIBLE_DEVICES=0,1
+            - VLLM_TARGET_DEVICE=hip
+    commands:
+      - pip install -e .[hip]
+      - python -m pytest tests/distributed/test_basic_distributed_correctness.py
+          -v --timeout=900
+          -k "tensor_parallel"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":amd: HIP - Quantization (GPTQ/AWQ)"
+    agents:
+      queue: amd-gpu
+    plugins:
+      - docker#v5.8.0:
+          image: "vllm/vllm-hip:latest"
+          gpus: all
+          environment:
+            - HIP_VISIBLE_DEVICES=0
+            - VLLM_TARGET_DEVICE=hip
+    commands:
+      - pip install -e .[hip]
+      - python -m pytest tests/quantization/ -v --timeout=600
+          -k "gptq or awq"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
