@@ -1,0 +1,63 @@
+# Buildkite pipeline configuration for Groq hardware tests
+# Tests vllm on Groq LPU (Language Processing Unit) hardware
+
+steps:
+  - label: ":groq: Groq LPU - Basic Inference Tests"
+    key: groq-basic-inference
+    agents:
+      queue: groq
+    env:
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    commands:
+      - echo "--- Setting up Groq environment"
+      - pip install -e ".[groq]" --extra-index-url https://pip.groq.com/simple
+      - echo "--- Running basic inference tests"
+      - pytest tests/groq/test_basic_inference.py -v --timeout=300
+    timeout_in_minutes: 30
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":groq: Groq LPU - Model Compatibility Tests"
+    key: groq-model-compat
+    depends_on: groq-basic-inference
+    agents:
+      queue: groq
+    commands:
+      - echo "--- Running model compatibility tests"
+      - pytest tests/groq/test_model_compatibility.py -v --timeout=600
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":groq: Groq LPU - Throughput Benchmark"
+    key: groq-throughput
+    depends_on: groq-model-compat
+    agents:
+      queue: groq
+    commands:
+      - echo "--- Running throughput benchmarks"
+      - python benchmarks/benchmark_throughput.py
+          --backend groq
+          --model meta-llama/Llama-2-7b-hf
+          --num-prompts 100
+          --output-len 128
+    timeout_in_minutes: 45
+    soft_fail: true
+
+  - label: ":groq: Groq LPU - OpenAI API Compatibility"
+    key: groq-openai-api
+    depends_on: groq-basic-inference
+    agents:
+      queue: groq
+    commands:
+      - echo "--- Testing OpenAI API compatibility"
+      - pytest tests/groq/test_openai_api.py -v --timeout=300
+    timeout_in_minutes: 30
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
