@@ -1,0 +1,108 @@
+# BuildKite CI configuration for ARM64 CPU hardware tests
+# Tests vllm on ARM64/AArch64 CPU platforms
+
+agents:
+  queue: arm64-cpu
+
+steps:
+  - label: ":arm: ARM64 CPU - Build & Install"
+    key: arm64-cpu-build
+    commands:
+      - echo "--- Building vllm for ARM64 CPU"
+      - python -m pip install --upgrade pip
+      - pip install -e ".[cpu]" --extra-index-url https://download.pytorch.org/whl/cpu
+    env:
+      VLLM_TARGET_DEVICE: cpu
+    agents:
+      queue: arm64-cpu
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":arm: ARM64 CPU - Basic Inference Tests"
+    key: arm64-cpu-inference
+    depends_on: arm64-cpu-build
+    commands:
+      - echo "--- Running basic inference tests on ARM64 CPU"
+      - pytest tests/basic_correctness/ -v --timeout=300
+        -k "not cuda and not gpu"
+        --ignore=tests/basic_correctness/test_chunked_prefill.py
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+    agents:
+      queue: arm64-cpu
+    timeout_in_minutes: 90
+
+  - label: ":arm: ARM64 CPU - Core Engine Tests"
+    key: arm64-cpu-engine
+    depends_on: arm64-cpu-build
+    commands:
+      - echo "--- Running core engine tests on ARM64 CPU"
+      - pytest tests/engine/ -v --timeout=300
+        -k "not cuda and not gpu"
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+    agents:
+      queue: arm64-cpu
+    timeout_in_minutes: 60
+
+  - label: ":arm: ARM64 CPU - Quantization Tests"
+    key: arm64-cpu-quantization
+    depends_on: arm64-cpu-build
+    commands:
+      - echo "--- Running quantization tests on ARM64 CPU"
+      - pytest tests/quantization/ -v --timeout=300
+        -k "not cuda and not gpu and not awq_marlin"
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+    agents:
+      queue: arm64-cpu
+    timeout_in_minutes: 90
+
+  - label: ":arm: ARM64 CPU - Entrypoints Tests"
+    key: arm64-cpu-entrypoints
+    depends_on: arm64-cpu-build
+    commands:
+      - echo "--- Running entrypoints tests on ARM64 CPU"
+      - pytest tests/entrypoints/ -v --timeout=300
+        -k "not cuda and not gpu"
+        --ignore=tests/entrypoints/openai/
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+    agents:
+      queue: arm64-cpu
+    timeout_in_minutes: 60
+
+  - label: ":arm: ARM64 CPU - OpenAI Entrypoint Tests"
+    key: arm64-cpu-openai
+    depends_on: arm64-cpu-build
+    commands:
+      - echo "--- Running OpenAI entrypoint tests on ARM64 CPU"
+      - pytest tests/entrypoints/openai/ -v --timeout=300
+        -k "not cuda and not gpu"
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+    agents:
+      queue: arm64-cpu
+    timeout_in_minutes: 90
+
+  - label: ":arm: ARM64 CPU - Sampling Tests"
+    key: arm64-cpu-sampling
+    depends_on: arm64-cpu-build
+    commands:
+      - echo "--- Running sampling tests on ARM64 CPU"
+      - pytest tests/samplers/ -v --timeout=300
+        -k "not cuda and not gpu"
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+    agents:
+      queue: arm64-cpu
+    timeout_in_minutes: 60
