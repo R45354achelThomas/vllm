@@ -1,0 +1,110 @@
+# CPU x86 hardware test configuration for vllm
+# Runs tests on x86 CPU-only environments (no GPU required)
+
+steps:
+  - label: ":cpu: CPU x86 - Basic Inference Tests"
+    agents:
+      queue: cpu-x86
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Setting up CPU x86 environment"
+      - pip install -e ".[cpu]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - echo "--- Running basic CPU inference tests"
+      - pytest tests/basic_correctness/test_basic_correctness.py -v
+        --timeout=300
+        -x
+        -m "not gpu"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":cpu: CPU x86 - OpenAI API Compatibility Tests"
+    agents:
+      queue: cpu-x86
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running OpenAI API compatibility tests on CPU"
+      - pytest tests/entrypoints/openai/ -v
+        --timeout=300
+        -x
+        -m "not gpu"
+        -k "not embedding"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":cpu: CPU x86 - Quantization Tests (INT8/INT4)"
+    agents:
+      queue: cpu-x86
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running quantization tests on CPU x86"
+      - pytest tests/quantization/ -v
+        --timeout=300
+        -x
+        -m "not gpu"
+        -k "int8 or int4 or awq or gptq"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":cpu: CPU x86 - Chunked Prefill Tests"
+    agents:
+      queue: cpu-x86
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 8
+      VLLM_CPU_KVCACHE_SPACE: 4
+    commands:
+      - echo "--- Running chunked prefill tests on CPU"
+      - pytest tests/basic_correctness/test_chunked_prefill.py -v
+        --timeout=300
+        -x
+        -m "not gpu"
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+
+  - label: ":cpu: CPU x86 - Multi-threading Stress Test"
+    agents:
+      queue: cpu-x86
+    env:
+      VLLM_TARGET_DEVICE: cpu
+      OMP_NUM_THREADS: 16
+      VLLM_CPU_KVCACHE_SPACE: 8
+    commands:
+      - echo "--- Running multi-threading stress tests on CPU x86"
+      - pytest tests/engine/ -v
+        --timeout=600
+        -x
+        -m "not gpu"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":cpu: CPU x86 - Wheel Size Check"
+    agents:
+      queue: cpu-x86
+    commands:
+      - echo "--- Checking CPU wheel size"
+      - python .buildkite/check-wheel-size.py dist/*.whl
+    timeout_in_minutes: 10
