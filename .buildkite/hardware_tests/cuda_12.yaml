@@ -1,0 +1,100 @@
+# Hardware test configuration for CUDA 12.x
+# Runs vllm tests on NVIDIA GPUs with CUDA 12 toolkit
+
+agents:
+  queue: nvidia-gpu
+  cuda: "12"
+
+steps:
+  - label: ":nvidia: CUDA 12 - Basic Inference Tests"
+    key: cuda12-basic-inference
+    commands:
+      - echo "--- Running basic inference tests on CUDA 12"
+      - pip install -e ".[cuda12]" --extra-index-url https://download.pytorch.org/whl/cu121
+      - pytest tests/basic_correctness/ -v --timeout=300 -x
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":nvidia: CUDA 12 - Model Loading Tests"
+    key: cuda12-model-loading
+    depends_on: cuda12-basic-inference
+    commands:
+      - echo "--- Running model loading tests on CUDA 12"
+      - pytest tests/models/ -v --timeout=600 -x -k "not quantization"
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      HF_HOME: /tmp/huggingface_cache
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":nvidia: CUDA 12 - Quantization Tests"
+    key: cuda12-quantization
+    depends_on: cuda12-basic-inference
+    commands:
+      - echo "--- Running quantization tests on CUDA 12"
+      - pytest tests/quantization/ -v --timeout=600 -x
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      HF_HOME: /tmp/huggingface_cache
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":nvidia: CUDA 12 - Tensor Parallel Tests"
+    key: cuda12-tensor-parallel
+    depends_on: cuda12-basic-inference
+    commands:
+      - echo "--- Running tensor parallel tests on CUDA 12 (requires 2+ GPUs)"
+      - pytest tests/distributed/ -v --timeout=600 -x -k "tensor_parallel"
+    env:
+      CUDA_VISIBLE_DEVICES: "0,1"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 120
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":nvidia: CUDA 12 - Async Engine Tests"
+    key: cuda12-async-engine
+    depends_on: cuda12-basic-inference
+    commands:
+      - echo "--- Running async engine tests on CUDA 12"
+      - pytest tests/async_engine/ -v --timeout=300 -x
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: ":nvidia: CUDA 12 - Benchmark Smoke Tests"
+    key: cuda12-benchmark-smoke
+    depends_on:
+      - cuda12-basic-inference
+      - cuda12-model-loading
+    commands:
+      - echo "--- Running benchmark smoke tests on CUDA 12"
+      - python benchmarks/benchmark_throughput.py
+          --model facebook/opt-125m
+          --backend vllm
+          --num-prompts 50
+          --max-model-len 512
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      HF_HOME: /tmp/huggingface_cache
+    timeout_in_minutes: 30
+    soft_fail: true
